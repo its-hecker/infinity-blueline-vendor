@@ -1,0 +1,58 @@
+name: Reset vendor to current LineageOS 24.0 baseline
+on:
+  push:
+    paths:
+      - .github/workflows/mirror-lineage.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: refresh-lineage-blueline
+  cancel-in-progress: false
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          lfs: false
+      - name: Replace old Infinity files with exact LineageOS source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name Hecker
+          git config user.email 118846180+its-hecker@users.noreply.github.com
+          git remote add lineage-source https://github.com/its-hecker/proprietary_vendor_google_blueline.git
+          git fetch --no-tags --depth=1 lineage-source +refs/heads/lineage-24.0:refs/remotes/lineage-source/lineage-24.0
+          SOURCE_SHA=$(git rev-parse refs/remotes/lineage-source/lineage-24.0)
+          test "$SOURCE_SHA" = "21b4fe5e00a992900436c56821916f6a056550a6" || { echo "LineageOS head moved: inspect before updating"; exit 1; }
+          export SOURCE_SHA
+          python3 - <<'PY'
+          import os, pathlib, subprocess
+          baseline = set(subprocess.check_output(["git","ls-tree","-r","--name-only",os.environ["SOURCE_SHA"]], text=True).splitlines())
+          tracked = subprocess.check_output(["git","ls-files","-z"]).decode().split("\0")
+          reserved = {".github/workflows/mirror-lineage.yml"}
+          for path in tracked:
+              if path and path not in baseline and path not in reserved:
+                  subprocess.run(["git", "rm", "-f", "-q", "--", path], check=True)
+          PY
+          GIT_LFS_SKIP_SMUDGE=1 git checkout "$SOURCE_SHA" -- . ':(exclude).github/workflows'
+          git rm -f --ignore-unmatch .lfsconfig
+          git lfs install --local
+          git remote add imported-lfs https://github.com/its-hecker/blueline_infinity_vendor.git
+          git fetch --no-tags --depth=1 imported-lfs +refs/heads/main:refs/remotes/imported-lfs/main
+          git -c lfs.url=https://github.com/its-hecker/blueline_infinity_vendor.git/info/lfs lfs fetch imported-lfs refs/remotes/imported-lfs/main
+          git lfs checkout
+          git config lfs.url "https://github.com/${GITHUB_REPOSITORY}.git/info/lfs"
+          git config lfs.pushurl "https://github.com/${GITHUB_REPOSITORY}.git/info/lfs"
+          test -f blueline-vendor.mk
+          git add -A
+          git diff --cached --stat
+          if git diff --cached --quiet; then
+            echo "Already matches LineageOS snapshot"
+            exit 0
+          fi
+          git commit -m "Reset Pixel 3 vendor to proven LineageOS 24.0 source"
+          git lfs push origin HEAD
+          git push origin HEAD:main
