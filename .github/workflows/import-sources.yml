@@ -30,11 +30,11 @@ jobs:
           git remote add boot-source https://github.com/its-hecker/blueline_infinity_vendor.git
           git fetch --depth=1 --no-tags boot-source +refs/heads/main:refs/remotes/boot-source/main
           git lfs install --local
+          GIT_LFS_SKIP_SMUDGE=1 git checkout refs/remotes/boot-source/main -- . ':(exclude).github/workflows'
+          git -c lfs.url=https://github.com/its-hecker/blueline_infinity_vendor.git/info/lfs lfs fetch boot-source refs/remotes/boot-source/main
+          git lfs checkout
           git config lfs.url "https://github.com/${GITHUB_REPOSITORY}.git/info/lfs"
           git config lfs.pushurl "https://github.com/${GITHUB_REPOSITORY}.git/info/lfs"
-          GIT_LFS_SKIP_SMUDGE=1 git checkout refs/remotes/boot-source/main -- . ':(exclude).github/workflows'
-          git lfs fetch boot-source refs/remotes/boot-source/main
-          git lfs checkout
           git add -A
           git commit -m "Import Android 17 Lineage-based Pixel 3 vendor for Infinity-X"
           git lfs push origin HEAD
